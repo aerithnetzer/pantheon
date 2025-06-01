@@ -5,9 +5,15 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "briefcase>=0.3.23",
     "fitz>=0.0.1.dev2",
+    "imageio>=2.37.0",
     "mistralai>=1.8.1",
+    "nuitka>=2.7.5",
+    "pathlib>=1.0.1",
     "pillow>=11.2.1",
+    "pipdeptree>=2.26.1",
+    "pyinstaller>=6.13.0",
     "pymupdf>=1.26.0",
     "send2trash>=1.8.3",
     "wxpython>=4.2.3",
