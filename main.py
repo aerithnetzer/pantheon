@@ -317,21 +317,6 @@ class ImageFrame(wx.Frame):
             wx.EVT_BUTTON, self.on_delete_button_clicked
         )  # Bind delete button
 
-        # Attempt to set the frame icon
-        try:
-            # Determine the absolute path to the icon file
-            # Assumes icon.ico is in the same directory as this script
-            script_dir = Path(__file__).resolve().parent
-            icon_file_path = script_dir / "icon.ico"
-
-            if icon_file_path.exists():
-                icon = wx.Icon(str(icon_file_path), wx.BITMAP_TYPE_ICO)
-                self.SetIcon(icon)
-            else:
-                wx.LogWarning(f"Icon file not found: {icon_file_path}")
-        except Exception as e:
-            wx.LogWarning(f"Could not load application icon '{icon_file_path}': {e}")
-
         self.Centre()
         self.Show()
         self.update_button_states()
@@ -1017,7 +1002,6 @@ class ImageApp(wx.App):
 
         wx.InitAllImageHandlers()
         frame = ImageFrame(None, "Pantheon")
-        frame.SetIcon(wx.Icon("icon.ico", wx.BITMAP_TYPE_ICO))
         frame.Show()
         return True
 
