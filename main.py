@@ -1,5 +1,6 @@
 import wx
-import wx.lib.agw.aui as aui
+
+# import wx.lib.agw.aui as aui # Unused import
 import os
 import json
 import base64
@@ -147,11 +148,15 @@ def _stitch_ocr_data(
                         wx.LogWarning, f"Skipping non-dict JSON: {json_file_path.name}"
                     )
                     continue
-                for page_idx, page_data in enumerate(ocr_data_obj.get("pages", [])):
+                for _page_idx, page_data in enumerate(
+                    ocr_data_obj.get("pages", [])
+                ):  # page_idx unused
                     markdown_content = page_data.get("markdown")
                     if not markdown_content:
                         continue
-                    for img_idx, image_info in enumerate(page_data.get("images", [])):
+                    for _img_idx, image_info in enumerate(
+                        page_data.get("images", [])
+                    ):  # img_idx unused
                         original_image_id = image_info.get("id")
                         base64_data_uri = image_info.get("image_base64")
                         if not original_image_id or not base64_data_uri:
@@ -207,7 +212,7 @@ def _stitch_ocr_data(
 
 class ImageFrame(wx.Frame):
     def __init__(self, parent, title):
-        super(ImageFrame, self).__init__(parent, title=title, size=(1200, 800))
+        super(ImageFrame, self).__init__(parent, title=title, size=wx.Size(1200, 800))
         self.panel = wx.Panel(self)
         self.current_opened_folder_path = None
         self.focused_item_path: Path | None = None  # For single item preview
@@ -223,6 +228,7 @@ class ImageFrame(wx.Frame):
             ".json",
             ".md",
             ".pdf",
+            ".txt",  # Added for text file preview
         ]
         self.supported_ocr_input_formats = [
             ".png",
@@ -254,13 +260,13 @@ class ImageFrame(wx.Frame):
 
         self.image_list = wx.ImageList(16, 16)
         self.folder_icon_idx = self.image_list.Add(
-            wx.ArtProvider.GetBitmap(wx.ART_FOLDER, wx.ART_OTHER, (16, 16))
+            wx.ArtProvider.GetBitmap(wx.ART_FOLDER, wx.ART_OTHER, wx.Size(16, 16))
         )
         self.folder_open_icon_idx = self.image_list.Add(
-            wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_OTHER, (16, 16))
+            wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_OTHER, wx.Size(16, 16))
         )
         self.file_icon_idx = self.image_list.Add(
-            wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE, wx.ART_OTHER, (16, 16))
+            wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE, wx.ART_OTHER, wx.Size(16, 16))
         )
 
         self.splitter = wx.SplitterWindow(self.panel, style=wx.SP_LIVE_UPDATE)
@@ -274,7 +280,7 @@ class ImageFrame(wx.Frame):
         self.preview_panel = wx.Panel(self.splitter)
         self.preview_sizer = wx.BoxSizer(wx.VERTICAL)
         self.image_preview_ctrl = wx.StaticBitmap(
-            self.preview_panel, bitmap=wx.Bitmap(1, 1)
+            self.preview_panel, bitmap=wx.BitmapBundle.FromBitmap(wx.Bitmap(1, 1))
         )
         self.text_preview_ctrl = wx.TextCtrl(
             self.preview_panel, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2
@@ -291,13 +297,15 @@ class ImageFrame(wx.Frame):
         self.open_folder_button = wx.Button(self.panel, label="Open Folder")
         self.run_ocr_button = wx.Button(self.panel, label="Run OCR on Selected")
         self.stitch_pdf_button = wx.Button(self.panel, label="Stitch All & Create PDF")
-        self.delete_button = wx.Button(
-            self.panel, label="Delete Selected"
-        )  # New Delete Button
+        self.delete_button = wx.Button(self.panel, label="Delete Selected")
+        self.create_txt_button = wx.Button(self.panel, label="Create TXT from JP2")
+        self.set_api_key_button = wx.Button(self.panel, label="Set Mistral API Key")
         hbox_buttons.Add(self.open_folder_button, 0, wx.ALL, 5)
         hbox_buttons.Add(self.run_ocr_button, 0, wx.ALL, 5)
+        hbox_buttons.Add(self.create_txt_button, 0, wx.ALL, 5)
         hbox_buttons.Add(self.stitch_pdf_button, 0, wx.ALL, 5)
-        hbox_buttons.Add(self.delete_button, 0, wx.ALL, 5)  # Add to sizer
+        hbox_buttons.Add(self.delete_button, 0, wx.ALL, 5)
+        hbox_buttons.Add(self.set_api_key_button, 0, wx.ALL, 5)
         vbox_main_layout.Add(hbox_buttons, 0, wx.ALIGN_CENTER | wx.TOP | wx.BOTTOM, 5)
         self.panel.SetSizer(vbox_main_layout)
 
@@ -313,9 +321,9 @@ class ImageFrame(wx.Frame):
         self.open_folder_button.Bind(wx.EVT_BUTTON, self.on_open_folder_selected)
         self.run_ocr_button.Bind(wx.EVT_BUTTON, self.on_run_ocr_button_clicked)
         self.stitch_pdf_button.Bind(wx.EVT_BUTTON, self.on_stitch_button_clicked)
-        self.delete_button.Bind(
-            wx.EVT_BUTTON, self.on_delete_button_clicked
-        )  # Bind delete button
+        self.delete_button.Bind(wx.EVT_BUTTON, self.on_delete_button_clicked)
+        self.create_txt_button.Bind(wx.EVT_BUTTON, self.on_create_txt_button_clicked)
+        self.set_api_key_button.Bind(wx.EVT_BUTTON, self.on_set_api_key_clicked)
 
         self.Centre()
         self.Show()
@@ -329,7 +337,7 @@ class ImageFrame(wx.Frame):
     def update_progress(self, value):
         self.progress_bar.SetValue(min(max(0, value), 100))  # Ensure value is 0-100
 
-    def on_open_folder_selected(self, event):
+    def on_open_folder_selected(self, _event):  # event unused
         with wx.DirDialog(
             self,
             "Choose a directory:",
@@ -356,7 +364,7 @@ class ImageFrame(wx.Frame):
         self.tree_ctrl.DeleteAllItems()
         self.all_selected_item_paths.clear()
         self.focused_item_path = None
-        print(f"DEBUG: on_tree_selection_changed triggered.")
+        print("DEBUG: on_tree_selection_changed triggered.")
 
         if not root_path or not root_path.is_dir():
             self.current_opened_folder_path = None
@@ -409,7 +417,7 @@ class ImageFrame(wx.Frame):
                     child_item, self.file_icon_idx, wx.TreeItemIcon_Normal
                 )
 
-    def on_fs_event(self, event):
+    def on_fs_event(self, _event):  # event unused
         if self.current_opened_folder_path and self.current_opened_folder_path.exists():
             wx.CallAfter(self.refresh_tree_due_to_fs_event)
         elif (
@@ -442,7 +450,7 @@ class ImageFrame(wx.Frame):
         )
 
     def clear_preview(self):
-        self.image_preview_ctrl.SetBitmap(wx.Bitmap(1, 1))
+        self.image_preview_ctrl.SetBitmap(wx.BitmapBundle.FromBitmap(wx.Bitmap(1, 1)))
         self.text_preview_ctrl.SetValue("")
         self.image_preview_ctrl.Show()
         self.text_preview_ctrl.Hide()
@@ -451,7 +459,7 @@ class ImageFrame(wx.Frame):
     def on_tree_selection_changed(self, event):  # Renamed from on_tree_item_selected
         self.all_selected_item_paths.clear()
         self.focused_item_path = None
-        print(f"DEBUG: on_tree_selection_changed triggered.")
+        print("DEBUG: on_tree_selection_changed triggered.")
 
         selected_tree_items_ids = (
             self.tree_ctrl.GetSelections()
@@ -494,13 +502,13 @@ class ImageFrame(wx.Frame):
                     self.text_preview_ctrl.Show()
                     self.preview_panel.Layout()
             else:
-                print(f"DEBUG: Event item has no path data. Clearing preview.")
+                print("DEBUG: Event item has no path data. Clearing preview.")
                 self.clear_preview()  # Fallback if event item has no data
         elif (
             self.all_selected_item_paths
         ):  # Fallback if event.GetItem() is not valid, use first selected
             print(
-                f"DEBUG: Event item not OK. Checking all_selected_item_paths for preview."
+                "DEBUG: Event item not OK. Checking all_selected_item_paths for preview."
             )
             # Preview the first valid file from the list of all selected items
             for path_obj in self.all_selected_item_paths:
@@ -517,7 +525,7 @@ class ImageFrame(wx.Frame):
                     self.display_preview(self.focused_item_path)
                     break
             else:  # No previewable file among selected items
-                print(f"DEBUG: No previewable file found in multi-selection.")
+                print("DEBUG: No previewable file found in multi-selection.")
                 self.clear_preview()
 
         self.update_button_states()
@@ -529,7 +537,7 @@ class ImageFrame(wx.Frame):
         self.text_preview_ctrl.Hide()
         ext = file_path.suffix.lower()
         try:
-            if ext in self.supported_ocr_input_formats:
+            if ext in self.supported_ocr_input_formats:  # Handles .jp2 as well
                 if not PILImage:
                     wx.LogError("Pillow not loaded.")
                     return
@@ -571,9 +579,11 @@ class ImageFrame(wx.Frame):
                 scaled_image = loaded_image.Scale(
                     new_width, new_height, wx.IMAGE_QUALITY_HIGH
                 )
-                self.image_preview_ctrl.SetBitmap(wx.Bitmap(scaled_image))
+                self.image_preview_ctrl.SetBitmap(
+                    wx.BitmapBundle.FromBitmap(wx.Bitmap(scaled_image))
+                )
                 self.image_preview_ctrl.Show()
-            elif ext in [".json", ".md"]:
+            elif ext in [".json", ".md", ".txt"]:
                 content = file_path.read_text(encoding="utf-8", errors="replace")
                 self.text_preview_ctrl.SetValue(content)
                 self.text_preview_ctrl.Show()
@@ -583,9 +593,9 @@ class ImageFrame(wx.Frame):
                         doc = fitz.open(file_path)
                         if len(doc) > 0:
                             page = doc.load_page(0)
-                            pix = page.get_pixmap()
+                            pix = page.get_pixmap()  # type: ignore
                             img_bytes = pix.tobytes("ppm")
-                            wx_image = wx.Image(io.BytesIO(img_bytes))
+                            wx_image = wx.Image(io.BytesIO(img_bytes))  # type: ignore
                             img_width, img_height = (
                                 wx_image.GetWidth(),
                                 wx_image.GetHeight(),
@@ -615,9 +625,13 @@ class ImageFrame(wx.Frame):
                             scaled_image = wx_image.Scale(
                                 new_width, new_height, wx.IMAGE_QUALITY_HIGH
                             )
-                            self.image_preview_ctrl.SetBitmap(wx.Bitmap(scaled_image))
+                            self.image_preview_ctrl.SetBitmap(
+                                wx.BitmapBundle.FromBitmap(wx.Bitmap(scaled_image))
+                            )
                         else:
-                            self.image_preview_ctrl.SetBitmap(wx.Bitmap(1, 1))
+                            self.image_preview_ctrl.SetBitmap(
+                                wx.BitmapBundle.FromBitmap(wx.Bitmap(1, 1))
+                            )
                         doc.close()
                         self.image_preview_ctrl.Show()
                     except Exception as e_pdf:
@@ -642,7 +656,7 @@ class ImageFrame(wx.Frame):
             self.text_preview_ctrl.Show()
         self.preview_panel.Layout()
 
-    def on_delete_button_clicked(self, event):
+    def on_delete_button_clicked(self, _event):  # event unused
         if not self.all_selected_item_paths:
             wx.MessageBox(
                 "No items selected to delete.", "Delete", wx.OK | wx.ICON_INFORMATION
@@ -695,7 +709,25 @@ class ImageFrame(wx.Frame):
         if error_count > 0:
             wx.LogMessage("Some items could not be deleted. Check log for details.")
 
-    def on_run_ocr_button_clicked(self, event):
+    def get_effective_output_base_path(self) -> Path | None:
+        """
+        Determines the base path for output folders (json, markdown, etc.).
+        If the currently opened folder is named 'JP2000' and has a parent,
+        outputs go into that parent directory. Otherwise, outputs go into
+        the currently opened folder.
+        Returns None if no folder is currently opened.
+        """
+        if not self.current_opened_folder_path:
+            return None
+        if (
+            self.current_opened_folder_path.name == "JP2000"
+            and self.current_opened_folder_path.parent
+            != self.current_opened_folder_path
+        ):
+            return self.current_opened_folder_path.parent
+        return self.current_opened_folder_path
+
+    def on_run_ocr_button_clicked(self, _event):  # event unused
         if not self.mistral_client:
             wx.MessageBox("Mistral client not initialized.", "Error")
             return
@@ -713,23 +745,41 @@ class ImageFrame(wx.Frame):
                 wx.OK | wx.ICON_INFORMATION,
             )
             return
-        if not self.current_opened_folder_path:
+        if not self.current_opened_folder_path:  # This check is important
             wx.MessageBox("Base folder not identified.", "Error")
             return
 
         self.run_ocr_button.Disable()
         self.stitch_pdf_button.Disable()
         self.delete_button.Disable()
+        self.create_txt_button.Disable()
         threading.Thread(
             target=self._perform_ocr_workflow_for_list,
-            args=(ocr_target_paths, self.current_opened_folder_path),
+            args=(
+                ocr_target_paths,
+                self.current_opened_folder_path,
+            ),  # Pass current folder at op start
         ).start()
 
     def _perform_ocr_workflow_for_list(
-        self, image_paths: list[Path], base_output_folder: Path
+        self, image_paths: list[Path], active_folder_at_op_start: Path
     ):
-        json_output_dir = base_output_folder / "json"
+        effective_base_path = self.get_effective_output_base_path()
+        if not effective_base_path:
+            wx.CallAfter(
+                wx.LogError, "Cannot determine effective base path for OCR outputs."
+            )
+            wx.CallAfter(self.run_ocr_button.Enable)
+            wx.CallAfter(self.stitch_pdf_button.Enable)
+            wx.CallAfter(self.delete_button.Enable)
+            wx.CallAfter(self.create_txt_button.Enable)
+            return
+
+        json_output_dir = effective_base_path / "json"
         json_output_dir.mkdir(parents=True, exist_ok=True)
+        text_output_dir = effective_base_path / "TEXT"
+        text_output_dir.mkdir(parents=True, exist_ok=True)
+
         total_files = len(image_paths)
         wx.CallAfter(self.update_progress, 0)
 
@@ -744,8 +794,9 @@ class ImageFrame(wx.Frame):
                 temp_pdf_path = Path(tmpdir) / image_path.with_suffix(".pdf").name
                 wx.CallAfter(
                     self.update_progress,
-                    current_file_progress_start + int(1 * (100 / total_files) / 4),
-                )  # 1/4th of this file's share
+                    current_file_progress_start
+                    + int(1 * (100 / total_files) / 5),  # Adjusted for new step
+                )
 
                 pdf_file = _image_to_pdf(
                     image_path,
@@ -758,12 +809,12 @@ class ImageFrame(wx.Frame):
                         f"Failed PDF conversion: {image_path.name}",
                         0,
                     )
-                    continue  # Skip to next file
+                    continue
 
                 wx.CallAfter(
                     self.update_progress,
-                    current_file_progress_start + int(2 * (100 / total_files) / 4),
-                )  # 2/4th
+                    current_file_progress_start + int(2 * (100 / total_files) / 5),
+                )
                 base64_pdf = _encode_pdf_to_base64(
                     pdf_file, lambda msg: wx.CallAfter(self.update_status, msg, 1)
                 )
@@ -775,8 +826,8 @@ class ImageFrame(wx.Frame):
 
                 wx.CallAfter(
                     self.update_progress,
-                    current_file_progress_start + int(3 * (100 / total_files) / 4),
-                )  # 3/4th
+                    current_file_progress_start + int(3 * (100 / total_files) / 5),
+                )
                 ocr_response_obj = _request_mistral_ocr(
                     self.mistral_client,
                     pdf_file,
@@ -784,20 +835,22 @@ class ImageFrame(wx.Frame):
                     lambda msg: wx.CallAfter(self.update_status, msg, 1),
                 )
 
+                ocr_data_dict = None  # Initialize for later check
                 if ocr_response_obj:
-                    ocr_data_dict = {}
                     try:
                         if hasattr(ocr_response_obj, "model_dump"):
                             ocr_data_dict = ocr_response_obj.model_dump()
                         elif hasattr(ocr_response_obj, "dict"):
                             ocr_data_dict = ocr_response_obj.dict()
                         else:
-                            ocr_data_dict = ocr_response_obj
+                            ocr_data_dict = (
+                                ocr_response_obj  # Assuming it's already a dict
+                            )
                     except Exception as e:
                         wx.CallAfter(
                             wx.LogError, f"Could not convert OCR response to dict: {e}"
                         )
-                        ocr_data_dict = {
+                        ocr_data_dict = {  # Ensure ocr_data_dict is a dict for consistent error handling
                             "error": "Failed to serialize OCR response",
                             "details": str(e),
                         }
@@ -827,24 +880,112 @@ class ImageFrame(wx.Frame):
                     wx.CallAfter(
                         self.update_status, f"Failed OCR request: {image_path.name}", 0
                     )
-            wx.CallAfter(
-                self.update_progress, int(((i + 1) / total_files) * 100)
-            )  # End of this file's share
+
+                wx.CallAfter(
+                    self.update_progress,
+                    current_file_progress_start + int(4 * (100 / total_files) / 5),
+                )
+
+                # Create .txt file from markdown in the ocr_data_dict
+                if ocr_data_dict and not ocr_data_dict.get("error"):
+                    full_text_content = ""
+                    for page_data in ocr_data_dict.get("pages", []):
+                        markdown_for_page = page_data.get("markdown", "")
+                        if markdown_for_page:
+                            full_text_content += markdown_for_page + "\n\n"
+
+                    if full_text_content.strip():
+                        txt_file_path = (
+                            text_output_dir / image_path.with_suffix(".txt").name
+                        )
+                        temp_md_path_for_txt = (
+                            Path(tmpdir) / f"{image_path.stem}_ocr_to_txt.md"
+                        )
+
+                        try:
+                            with open(
+                                temp_md_path_for_txt, "w", encoding="utf-8"
+                            ) as md_f:
+                                md_f.write(full_text_content.strip())
+
+                            pandoc_cmd_txt = [
+                                "pandoc",
+                                str(temp_md_path_for_txt),
+                                "-f",
+                                "markdown",
+                                "-t",
+                                "plain",
+                                "-o",
+                                str(txt_file_path),
+                            ]
+                            txt_result = subprocess.run(
+                                pandoc_cmd_txt,
+                                capture_output=True,
+                                text=True,
+                                check=False,
+                                cwd=effective_base_path,
+                            )
+                            if txt_result.returncode == 0:
+                                wx.CallAfter(
+                                    self.update_status,
+                                    f"TXT from OCR: {txt_file_path.name}",
+                                    1,
+                                )
+                            else:
+                                txt_error_msg = f"Pandoc (OCR->TXT) {image_path.name} (Code {txt_result.returncode}): {txt_result.stderr}"
+                                wx.CallAfter(wx.LogError, txt_error_msg)
+                                wx.CallAfter(
+                                    self.update_status,
+                                    f"Pandoc TXT failed: {image_path.name}",
+                                    0,
+                                )
+                                if (
+                                    txt_file_path.exists()
+                                    and txt_file_path.stat().st_size == 0
+                                ):
+                                    txt_file_path.unlink(missing_ok=True)
+                        except FileNotFoundError:
+                            wx.CallAfter(wx.LogError, "Pandoc not found for OCR->TXT.")
+                            wx.CallAfter(
+                                self.update_status,
+                                f"Pandoc missing for TXT: {image_path.name}",
+                                0,
+                            )
+                        except Exception as e_pandoc_txt:
+                            wx.CallAfter(
+                                wx.LogError,
+                                f"Pandoc error (OCR->TXT) {image_path.name}: {e_pandoc_txt}",
+                            )
+                            wx.CallAfter(
+                                self.update_status,
+                                f"Pandoc error for TXT: {image_path.name}",
+                                0,
+                            )
+                    else:
+                        wx.CallAfter(
+                            wx.LogInfo,
+                            f"No markdown in OCR for {image_path.name} to make TXT.",
+                        )
+                elif ocr_data_dict and ocr_data_dict.get("error"):
+                    wx.CallAfter(
+                        wx.LogInfo,
+                        f"Skipping TXT from OCR for {image_path.name} due to OCR error.",
+                    )
+
+            wx.CallAfter(self.update_progress, int(((i + 1) / total_files) * 100))
 
         wx.CallAfter(
             self.update_status, "OCR processing complete for selected files.", 0
         )
         wx.CallAfter(self.update_progress, 100)
-        if (
-            self.current_opened_folder_path == base_output_folder
-        ):  # Refresh tree if output is in current view
+        if self.current_opened_folder_path == active_folder_at_op_start:
             wx.CallAfter(self.refresh_tree_due_to_fs_event)
         wx.CallAfter(self.run_ocr_button.Enable)
         wx.CallAfter(self.stitch_pdf_button.Enable)
         wx.CallAfter(self.delete_button.Enable)
+        wx.CallAfter(self.create_txt_button.Enable)
 
-    def on_stitch_button_clicked(self, event):
-        # ... (on_stitch_button_clicked logic remains largely the same)
+    def on_stitch_button_clicked(self, _event):  # event unused
         if not self.mistral_client:
             wx.MessageBox("Mistral client not initialized.", "Error")
             return
@@ -854,22 +995,36 @@ class ImageFrame(wx.Frame):
         self.run_ocr_button.Disable()
         self.stitch_pdf_button.Disable()
         self.delete_button.Disable()
+        self.create_txt_button.Disable()
         threading.Thread(
             target=self._perform_stitch_and_pandoc_workflow,
-            args=(self.current_opened_folder_path,),
+            args=(self.current_opened_folder_path,),  # Pass current folder at op start
         ).start()
 
-    def _perform_stitch_and_pandoc_workflow(self, base_folder: Path):
-        # ... (_perform_stitch_and_pandoc_workflow logic remains largely the same)
-        json_dir = base_folder / "json"
-        markdown_dir = base_folder / "markdown"
-        images_dir = base_folder / "images"
-        final_pdf_dir = base_folder / "final_output"
+    def _perform_stitch_and_pandoc_workflow(self, active_folder_at_op_start: Path):
+        effective_base_path = self.get_effective_output_base_path()
+        if not effective_base_path:
+            wx.CallAfter(
+                wx.LogError, "Cannot determine effective base path for stitching."
+            )
+            wx.CallAfter(self.run_ocr_button.Enable)
+            wx.CallAfter(self.stitch_pdf_button.Enable)
+            wx.CallAfter(self.delete_button.Enable)
+            wx.CallAfter(self.create_txt_button.Enable)
+            return
+
+        json_dir = effective_base_path / "json"
+        markdown_dir = effective_base_path / "markdown"
+        images_dir = effective_base_path / "images"
+        final_pdf_dir = effective_base_path / "final_output"
+
         markdown_dir.mkdir(parents=True, exist_ok=True)
-        images_dir.mkdir(parents=True, exist_ok=True)
+        # images_dir is created by _stitch_ocr_data if needed
         final_pdf_dir.mkdir(parents=True, exist_ok=True)
+
         stitched_md_path = markdown_dir / "stitched_document.md"
         final_pdf_path = final_pdf_dir / "final_document.pdf"
+
         wx.CallAfter(self.update_progress, 5)
         wx.CallAfter(self.update_status, "Collecting JSON files...", 0)
         if not json_dir.exists() or not any(json_dir.iterdir()):
@@ -878,6 +1033,7 @@ class ImageFrame(wx.Frame):
             wx.CallAfter(self.run_ocr_button.Enable)
             wx.CallAfter(self.stitch_pdf_button.Enable)
             wx.CallAfter(self.delete_button.Enable)
+            wx.CallAfter(self.create_txt_button.Enable)
             return
         json_files = sorted([f for f in json_dir.glob("*.json") if f.is_file()])
         if not json_files:
@@ -888,6 +1044,7 @@ class ImageFrame(wx.Frame):
             wx.CallAfter(self.run_ocr_button.Enable)
             wx.CallAfter(self.stitch_pdf_button.Enable)
             wx.CallAfter(self.delete_button.Enable)
+            wx.CallAfter(self.create_txt_button.Enable)
             return
         wx.CallAfter(self.update_progress, 20)
         _stitch_ocr_data(json_files, stitched_md_path, images_dir, self.update_status)
@@ -904,7 +1061,11 @@ class ImageFrame(wx.Frame):
                 "--pdf-engine=tectonic",
             ]
             result = subprocess.run(
-                pandoc_cmd, capture_output=True, text=True, check=False, cwd=base_folder
+                pandoc_cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=effective_base_path,
             )
             if result.returncode == 0:
                 wx.CallAfter(self.update_status, f"Final PDF: {final_pdf_path.name}", 0)
@@ -914,7 +1075,7 @@ class ImageFrame(wx.Frame):
                     f"Successfully created PDF: {final_pdf_path}",
                     "Success",
                 )
-                if self.current_opened_folder_path == base_folder:
+                if self.current_opened_folder_path == active_folder_at_op_start:
                     wx.CallAfter(self.refresh_tree_due_to_fs_event)
             else:
                 wx.CallAfter(
@@ -942,8 +1103,260 @@ class ImageFrame(wx.Frame):
         wx.CallAfter(self.run_ocr_button.Enable)
         wx.CallAfter(self.stitch_pdf_button.Enable)
         wx.CallAfter(self.delete_button.Enable)
+        wx.CallAfter(self.create_txt_button.Enable)
 
-    def on_exit(self, event):
+    def on_set_api_key_clicked(self, _event):
+        dlg = wx.TextEntryDialog(
+            self,
+            "Enter your Mistral API Key:",
+            "Set Mistral API Key",
+            value=self.mistral_api_key or "",
+        )
+        if dlg.ShowModal() == wx.ID_OK:
+            new_key = dlg.GetValue().strip()
+            if new_key:
+                self.mistral_api_key = new_key
+                os.environ["MISTRAL_API_KEY"] = new_key
+                if Mistral:
+                    try:
+                        self.mistral_client = Mistral(api_key=new_key)
+                        wx.MessageBox(
+                            "Mistral API Key set and client initialized.", "Success"
+                        )
+                    except Exception as e:
+                        self.mistral_client = None
+                        wx.MessageBox(
+                            f"Failed to initialize Mistral client: {e}", "Error"
+                        )
+                else:
+                    wx.MessageBox(
+                        "Mistral library not loaded. Install 'mistralai'.", "Error"
+                    )
+            else:
+                wx.MessageBox("API key cannot be empty.", "Error")
+        dlg.Destroy()
+        self.update_button_states()
+
+    def on_create_txt_button_clicked(self, _event):
+        if not self.mistral_client:
+            wx.MessageBox(
+                "Mistral client not initialized.", "Error", wx.OK | wx.ICON_ERROR
+            )
+            return
+
+        jp2_target_paths = [
+            p
+            for p in self.all_selected_item_paths
+            if p.is_file() and p.suffix.lower() == ".jp2"
+        ]
+
+        if not jp2_target_paths:
+            wx.MessageBox(
+                "No JP2 files selected for TXT creation.",
+                "Create TXT",
+                wx.OK | wx.ICON_INFORMATION,
+            )
+            return
+        if not self.current_opened_folder_path:  # This check is important
+            wx.MessageBox("Base folder not identified.", "Error", wx.OK | wx.ICON_ERROR)
+            return
+
+        self.run_ocr_button.Disable()
+        self.stitch_pdf_button.Disable()
+        self.delete_button.Disable()
+        self.create_txt_button.Disable()
+        threading.Thread(
+            target=self._perform_jp2_to_txt_workflow,
+            args=(
+                jp2_target_paths,
+                self.current_opened_folder_path,
+            ),  # Pass current folder at op start
+        ).start()
+
+    def _perform_jp2_to_txt_workflow(
+        self, jp2_paths: list[Path], active_folder_at_op_start: Path
+    ):
+        effective_base_path = self.get_effective_output_base_path()
+        if not effective_base_path:
+            wx.CallAfter(
+                wx.LogError, "Cannot determine effective base path for TXT outputs."
+            )
+            wx.CallAfter(self.run_ocr_button.Enable)
+            wx.CallAfter(self.stitch_pdf_button.Enable)
+            wx.CallAfter(self.delete_button.Enable)
+            wx.CallAfter(self.create_txt_button.Enable)
+            return
+
+        txt_output_dir = (
+            effective_base_path / "text_output"
+        )  # This is for the dedicated JP2->TXT button
+        txt_output_dir.mkdir(parents=True, exist_ok=True)
+        total_files = len(jp2_paths)
+        wx.CallAfter(self.update_progress, 0)
+
+        for i, jp2_path in enumerate(jp2_paths):
+            current_file_progress_start = int((i / total_files) * 100)
+            wx.CallAfter(
+                self.update_status,
+                f"Processing JP2 {i + 1}/{total_files}: {jp2_path.name}...",
+            )
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                temp_pdf_path = Path(tmpdir) / jp2_path.with_suffix(".pdf").name
+                wx.CallAfter(
+                    self.update_progress,
+                    current_file_progress_start + int(1 * (100 / total_files) / 4),
+                )
+
+                pdf_file = _image_to_pdf(
+                    jp2_path,
+                    temp_pdf_path,
+                    lambda msg: wx.CallAfter(self.update_status, msg, 1),
+                )
+                if not pdf_file:
+                    wx.CallAfter(
+                        self.update_status,
+                        f"Failed PDF conversion for: {jp2_path.name}",
+                        0,
+                    )
+                    continue
+
+                wx.CallAfter(
+                    self.update_progress,
+                    current_file_progress_start + int(2 * (100 / total_files) / 4),
+                )
+                base64_pdf = _encode_pdf_to_base64(
+                    pdf_file, lambda msg: wx.CallAfter(self.update_status, msg, 1)
+                )
+                if not base64_pdf:
+                    wx.CallAfter(
+                        self.update_status,
+                        f"Failed PDF encoding for: {jp2_path.name}",
+                        0,
+                    )
+                    continue
+
+                wx.CallAfter(
+                    self.update_progress,
+                    current_file_progress_start + int(3 * (100 / total_files) / 4),
+                )
+                ocr_response_obj = _request_mistral_ocr(
+                    self.mistral_client,
+                    pdf_file,
+                    base64_pdf,
+                    lambda msg: wx.CallAfter(self.update_status, msg, 1),
+                )
+
+                if ocr_response_obj:
+                    try:
+                        ocr_data_dict = {}
+                        if hasattr(ocr_response_obj, "model_dump"):
+                            ocr_data_dict = ocr_response_obj.model_dump()
+                        elif hasattr(ocr_response_obj, "dict"):
+                            ocr_data_dict = ocr_response_obj.dict()
+                        else:
+                            ocr_data_dict = ocr_response_obj
+
+                        full_text_content = ""
+                        for page_data in ocr_data_dict.get("pages", []):
+                            markdown_content = page_data.get("markdown", "")
+                            if markdown_content:
+                                full_text_content += markdown_content + "\n\n"
+
+                        txt_file_path = (
+                            txt_output_dir / jp2_path.with_suffix(".txt").name
+                        )
+                        temp_md_path = Path(tmpdir) / f"{jp2_path.stem}_ocr_temp.md"
+
+                        with open(temp_md_path, "w", encoding="utf-8") as md_f:
+                            md_f.write(full_text_content.strip())
+
+                        pandoc_cmd = [
+                            "pandoc",
+                            str(temp_md_path),
+                            "-f",
+                            "markdown",
+                            "-t",
+                            "plain",
+                            "-o",
+                            str(txt_file_path),
+                        ]
+                        try:
+                            result = subprocess.run(
+                                pandoc_cmd,
+                                capture_output=True,
+                                text=True,
+                                check=False,  # Check returncode manually
+                                cwd=effective_base_path,
+                            )
+                            if result.returncode == 0:
+                                wx.CallAfter(
+                                    self.update_status,
+                                    f"TXT created via Pandoc: {txt_file_path.name}",
+                                    1,
+                                )
+                            else:
+                                error_message = f"Pandoc TXT conversion error for {jp2_path.name} (Code {result.returncode}):\n{result.stderr}"
+                                wx.CallAfter(wx.LogError, error_message)
+                                wx.CallAfter(
+                                    self.update_status,
+                                    f"Pandoc TXT failed: {jp2_path.name}",
+                                    0,
+                                )
+                                if (
+                                    txt_file_path.exists()
+                                    and txt_file_path.stat().st_size == 0
+                                ):
+                                    txt_file_path.unlink(missing_ok=True)
+                        except FileNotFoundError:
+                            wx.CallAfter(
+                                wx.LogError,
+                                "Pandoc not found. Cannot convert extracted Markdown to TXT.",
+                            )
+                            wx.CallAfter(
+                                self.update_status,
+                                f"Pandoc not found for TXT: {jp2_path.name}",
+                                0,
+                            )
+                        except Exception as pandoc_e:
+                            wx.CallAfter(
+                                wx.LogError,
+                                f"Error running Pandoc for TXT {jp2_path.name}: {pandoc_e}",
+                            )
+                            wx.CallAfter(
+                                self.update_status,
+                                f"Pandoc error for TXT: {jp2_path.name}",
+                                0,
+                            )
+
+                    except Exception as e:
+                        wx.CallAfter(
+                            wx.LogError,
+                            f"Failed to process OCR or save TXT for {jp2_path.name}: {e}",
+                        )
+                        wx.CallAfter(
+                            self.update_status,
+                            f"Failed TXT creation: {jp2_path.name}",
+                            0,
+                        )
+                else:
+                    wx.CallAfter(
+                        self.update_status,
+                        f"Failed OCR request for: {jp2_path.name}",
+                        0,
+                    )
+            wx.CallAfter(self.update_progress, int(((i + 1) / total_files) * 100))
+
+        wx.CallAfter(self.update_status, "TXT creation from JP2 complete.", 0)
+        wx.CallAfter(self.update_progress, 100)
+        if self.current_opened_folder_path == active_folder_at_op_start:
+            wx.CallAfter(self.refresh_tree_due_to_fs_event)
+        wx.CallAfter(self.run_ocr_button.Enable)
+        wx.CallAfter(self.stitch_pdf_button.Enable)
+        wx.CallAfter(self.delete_button.Enable)
+        wx.CallAfter(self.create_txt_button.Enable)
+
+    def on_exit(self, _event):  # event unused
         if self.fs_watcher:
             self.fs_watcher.RemoveAll()
         self.Close(True)
@@ -960,13 +1373,20 @@ class ImageFrame(wx.Frame):
         ]
         can_run_ocr_on_selection = can_ocr and bool(ocr_target_paths)
 
+        # Create TXT from JP2 button enabled if at least one selected file is a .jp2
+        jp2_target_paths = [
+            p
+            for p in self.all_selected_item_paths
+            if p.is_file() and p.suffix.lower() == ".jp2"
+        ]
+        can_create_txt_from_jp2 = can_ocr and bool(jp2_target_paths)
+
         is_folder_opened = self.current_opened_folder_path is not None
 
-        self.run_ocr_button.Enable(can_run_ocr_on_selection)
+        self.run_ocr_button.Enable(can_run_ocr_on_selection and is_folder_opened)
+        self.create_txt_button.Enable(can_create_txt_from_jp2 and is_folder_opened)
         self.stitch_pdf_button.Enable(can_ocr and is_folder_opened)
-        self.delete_button.Enable(
-            has_selection and is_folder_opened
-        )  # Can delete if items are selected & folder is open
+        self.delete_button.Enable(has_selection and is_folder_opened)
 
 
 class ImageApp(wx.App):
